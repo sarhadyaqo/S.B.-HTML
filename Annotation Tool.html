@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Annotation Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+
+        .toolbar {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 16px 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.5);
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .tool-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding-right: 12px;
+            border-right: 2px solid #e0e0e0;
+        }
+
+        .tool-group:last-child {
+            border-right: none;
+        }
+
+        .tool-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.3s;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .tool-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .tool-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tool-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: -35px;
+            left: 50%;
+            transform: translateX(-50%) scale(0);
+            background: #333;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            transition: all 0.2s;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 20000;
+        }
+
+        .tool-btn:hover::after {
+            transform: translateX(-50%) scale(1);
+            opacity: 1;
+        }
+
+        .color-picker {
+            width: 44px;
+            height: 44px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .color-picker:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .size-input {
+            width: 60px;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        #annotationCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: transparent;
+        }
+
+        .background-upload {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 100;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+        }
+
+        .background-upload.hidden {
+            display: none;
+        }
+
+        .upload-btn {
+            padding: 16px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+        }
+
+        #backgroundImage {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            z-index: -1;
+            background: white;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .resize-controls {
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .resize-controls.show {
+            display: flex;
+        }
+
+        .resize-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            background: #f5f5f5;
+        }
+
+        .resize-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .zoom-display {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .action-buttons {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 12px;
+            z-index: 10000;
+        }
+
+        .action-btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .btn-clear {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-clear:hover {
+            background: #d32f2f;
+            transform: translateY(-2px);
+        }
+
+        .btn-save {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+
+        .btn-undo {
+            background: #FF9800;
+            color: white;
+        }
+
+        .btn-undo:hover {
+            background: #F57C00;
+            transform: translateY(-2px);
+        }
+
+        .text-input-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 20000;
+        }
+
+        .text-input-modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            min-width: 400px;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 16px;
+            color: #333;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+
+        .text-size-control {
+            margin-bottom: 16px;
+        }
+
+        .text-size-control label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .text-size-control input {
+            margin-bottom: 0;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .modal-btn-cancel {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .modal-btn-ok {
+            background: #667eea;
+            color: white;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
+            to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-upload" id="uploadPrompt">
+        <h2>📸 Professional Screen Annotation Tool</h2>
+        <p style="margin: 16px 0; color: #666;">Upload an image, PDF, or screenshot to start annotating</p>
+        <input type="file" id="imageUpload" accept="image/*,.pdf" style="display: none;">
+        <button class="upload-btn" onclick="document.getElementById('imageUpload').click()">
+            📁 Upload Image/PDF
+        </button>
+        <p style="margin-top: 16px; color: #999; font-size: 14px;">or start with a blank canvas</p>
+        <button class="upload-btn" style="background: #6c757d;" onclick="startBlankCanvas()">
+            ⬜ Blank Canvas
+        </button>
+    </div>
+
+    <img id="backgroundImage" style="display: none;">
+
+    <div class="resize-controls" id="resizeControls">
+        <button class="resize-btn" onclick="zoomImage(-0.1)">🔍−</button>
+        <span class="zoom-display" id="zoomDisplay">100%</span>
+        <button class="resize-btn" onclick="zoomImage(0.1)">🔍+</button>
+        <button class="resize-btn" onclick="resetZoom()">↻ Reset</button>
+        <button class="resize-btn" onclick="fitToScreen()">⛶ Fit</button>
+    </div>
+
+    <div class="toolbar" style="display: none;" id="toolbar">
+        <div class="tool-group">
+            <button class="tool-btn" data-tooltip="Select & Move" data-tool="select" onclick="selectTool('select')">🔲</button>
+            <button class="tool-btn active" data-tooltip="Draw" data-tool="draw" onclick="selectTool('draw')">✏️</button>
+            <button class="tool-btn" data-tooltip="Line" data-tool="line" onclick="selectTool('line')">📏</button>
+            <button class="tool-btn" data-tooltip="Arrow" data-tool="arrow" onclick="selectTool('arrow')">➡️</button>
+            <button class="tool-btn" data-tooltip="Rectangle" data-tool="rectangle" onclick="selectTool('rectangle')">▭</button>
+            <button class="tool-btn" data-tooltip="Circle" data-tool="circle" onclick="selectTool('circle')">⭕</button>
+        </div>
+
+        <div class="tool-group">
+            <button class="tool-btn" data-tooltip="Text" data-tool="text" onclick="selectTool('text')">T</button>
+            <button class="tool-btn" data-tooltip="Highlighter" data-tool="highlighter" onclick="selectTool('highlighter')">🖍️</button>
+            <button class="tool-btn" data-tooltip="Eraser" data-tool="eraser" onclick="selectTool('eraser')">🧹</button>
+        </div>
+
+        <div class="tool-group">
+            <button class="tool-btn" data-tooltip="Pan (Move Image)" data-tool="pan" onclick="selectTool('pan')">✋</button>
+            <button class="tool-btn" data-tooltip="Color Picker" data-tool="eyedropper" onclick="selectTool('eyedropper')">💧</button>
+        </div>
+
+        <div class="tool-group">
+            <input type="color" class="color-picker" id="colorPicker" value="#ff0000" title="Pick Color">
+            <input type="number" class="size-input" id="sizeInput" value="3" min="1" max="50" title="Brush Size">
+        </div>
+    </div>
+
+    <div class="canvas-container" style="display: none;" id="canvasContainer">
+        <canvas id="annotationCanvas"></canvas>
+        <div class="selection-box" id="selectionBox"></div>
+    </div>
+
+    <div class="action-buttons" style="display: none;" id="actionButtons">
+        <button class="action-btn btn-undo" onclick="undo()">↶ Undo</button>
+        <button class="action-btn btn-clear" onclick="clearCanvas()">🗑️ Clear All</button>
+        <button class="action-btn btn-save" onclick="saveImage()">💾 Save</button>
+    </div>
+
+    <div class="text-input-modal" id="textModal">
+        <div class="modal-content">
+            <h3>Add Text Annotation</h3>
+            <input type="text" id="textInput" placeholder="Enter your text..." autofocus>
+            <div class="text-size-control">
+                <label>Text Size:</label>
+                <input type="number" id="textSizeInput" value="24" min="10" max="120">
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="cancelText()">Cancel</button>
+                <button class="modal-btn modal-btn-ok" onclick="addText()">Add Text</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Initialize PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Canvas and context
+        const canvas = document.getElementById('annotationCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        // State variables
+        let state = {
+            currentTool: 'draw',
+            isDrawing: false,
+            isDragging: false,
+            isPanning: false,
+            startX: 0,
+            startY: 0,
+            currentPath: [],
+            history: [], // Stores all shapes, lines, paths, etc.
+            textObjects: [], // Stores all text objects
+            selectedElement: null,
+            dragOffsetX: 0,
+            dragOffsetY: 0,
+            panStartX: 0,
+            panStartY: 0,
+            imageScale: 1,
+            imageOffsetX: 0,
+            imageOffsetY: 0,
+            originalImageWidth: 0,
+            originalImageHeight: 0,
+            // New state for temporary shape drawing (line, rect, circle)
+            tempShape: null 
+        };
+
+        // --- Utility Functions ---
+
+        // Get mouse position relative to canvas
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        // --- Hit Test and Selection ---
+
+        function hitTest(x, y) {
+            const tolerance = 15; // Increased tolerance for easier selection
+
+            // Check text objects first (drawn last)
+            for (let i = state.textObjects.length - 1; i >= 0; i--) {
+                const textObj = state.textObjects[i];
+                ctx.font = `${textObj.size}px Arial`;
+                const metrics = ctx.measureText(textObj.text);
+                const textWidth = metrics.width;
+                const textHeight = textObj.size * 1.2; // Approximate line height
+                
+                const checkX = textObj.x + (textObj.offsetX || 0);
+                const checkY = textObj.y + (textObj.offsetY || 0);
+
+                // Bounding box check for text (from start X, up to textHeight)
+                if (x >= checkX - tolerance && 
+                    x <= checkX + textWidth + tolerance &&
+                    y >= checkY - textHeight - tolerance && 
+                    y <= checkY + tolerance) {
+                    return textObj;
+                }
+            }
+
+            // Check all history items (shapes and paths)
+            for (let i = state.history.length - 1; i >= 0; i--) {
+                const item = state.history[i];
+                const dx = item.offsetX || 0;
+                const dy = item.offsetY || 0;
+                const effectiveTolerance = tolerance + (item.size || 3);
+
+                // Bounding box calculation for hit testing
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                let boundsCalculated = false;
+
+                if (['draw', 'highlighter', 'eraser'].includes(item.type)) {
+                    if (!item.path || item.path.length === 0) continue;
+                    item.path.forEach(point => {
+                        const px = point.x + dx;
+                        const py = point.y + dy;
+                        minX = Math.min(minX, px);
+                        minY = Math.min(minY, py);
+                        maxX = Math.max(maxX, px);
+                        maxY = Math.max(maxY, py);
+                    });
+                    boundsCalculated = true;
+                } else if (['line', 'arrow', 'rectangle', 'circle'].includes(item.type)) {
+                    const x1 = item.x1 + dx;
+                    const y1 = item.y1 + dy;
+                    const x2 = item.x2 + dx;
+                    const y2 = item.y2 + dy;
+                    
+                    if (item.type === 'circle') {
+                        // Use bounding box of the circle for selection
+                        const width = Math.abs(x2 - x1);
+                        const height = Math.abs(y2 - y1);
+                        const radius = Math.max(width, height) / 2; 
+                        const centerX = (x1 + x2) / 2;
+                        const centerY = (y1 + y2) / 2;
+                        
+                        minX = centerX - radius;
+                        minY = centerY - radius;
+                        maxX = centerX + radius;
+                        maxY = centerY + radius;
+
+                    } else {
+                        minX = Math.min(x1, x2);
+                        minY = Math.min(y1, y2);
+                        maxX = Math.max(x1, x2);
+                        maxY = Math.max(y1, y2);
+                    }
+                    boundsCalculated = true;
+                }
+
+                if (boundsCalculated) {
+                    // Check if inside bounding box (with tolerance)
+                    if (x >= minX - effectiveTolerance && 
+                        x <= maxX + effectiveTolerance && 
+                        y >= minY - effectiveTolerance && 
+                        y <= maxY + effectiveTolerance) {
+                        
+                        // For paths, lines, and arrows, perform a more accurate point-on-line test
+                        if (['draw', 'highlighter', 'eraser', 'line', 'arrow'].includes(item.type)) {
+                            return item; 
+                        } else {
+                            // For shapes like rect/circle, bounding box hit is sufficient for selection
+                            return item;
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        function highlightSelectedElement(element) {
+            ctx.save();
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            ctx.globalAlpha = 1;
+            ctx.lineCap = 'butt';
+            ctx.lineJoin = 'miter';
+
+            const dx = element.offsetX || 0;
+            const dy = element.offsetY || 0;
+            const padding = 10;
+
+            // Get bounding box
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            if (element.type === 'text') {
+                ctx.font = `${element.size}px Arial`;
+                const metrics = ctx.measureText(element.text);
+                const textWidth = metrics.width;
+                const textHeight = element.size * 1.2; // Use approximated height
+                minX = element.x + dx;
+                minY = element.y + dy - textHeight;
+                maxX = element.x + dx + textWidth;
+                maxY = element.y + dy;
+            } else if (['draw', 'highlighter', 'eraser'].includes(element.type)) {
+                element.path.forEach(point => {
+                    const px = point.x + dx;
+                    const py = point.y + dy;
+                    minX = Math.min(minX, px);
+                    minY = Math.min(minY, py);
+                    maxX = Math.max(maxX, px);
+                    maxY = Math.max(maxY, py);
+                });
+            } else if (['line', 'arrow', 'rectangle', 'circle'].includes(element.type)) {
+                const x1 = element.x1 + dx;
+                const y1 = element.y1 + dy;
+                const x2 = element.x2 + dx;
+                const y2 = element.y2 + dy;
+
+                if (element.type === 'circle') {
+                    // Calculate bounding box based on the drawn circle
+                    const width = Math.abs(x2 - x1);
+                    const height = Math.abs(y2 - y1);
+                    const radius = Math.max(width, height) / 2;
+                    const centerX = (x1 + x2) / 2;
+                    const centerY = (y1 + y2) / 2;
+
+                    minX = centerX - radius;
+                    minY = centerY - radius;
+                    maxX = centerX + radius;
+                    maxY = centerY + radius;
+                } else {
+                    minX = Math.min(x1, x2);
+                    minY = Math.min(y1, y2);
+                    maxX = Math.max(x1, x2);
+                    maxY = Math.max(y1, y2);
+                }
+            }
+
+            // Draw the bounding box around the element
+            const width = maxX - minX;
+            const height = maxY - minY;
+            
+            ctx.strokeRect(minX - padding, minY - padding, width + 2 * padding, height + 2 * padding);
+
+            ctx.restore();
+        }
+
+
+        // --- Drawing Functions ---
+
+        function drawElement(item) {
+            ctx.save();
+            const dx = item.offsetX || 0;
+            const dy = item.offsetY || 0;
+
+            if (item.type === 'text') {
+                ctx.fillStyle = item.color;
+                ctx.font = `${item.size}px Arial`;
+                ctx.globalAlpha = 1.0;
+                ctx.globalCompositeOperation = 'source-over';
+                // Text is drawn at a baseline, so (x, y) is the bottom-left corner.
+                ctx.fillText(item.text, item.x + dx, item.y + dy);
+            } else if (['draw', 'highlighter', 'eraser'].includes(item.type)) {
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = item.size;
+                ctx.strokeStyle = item.color;
+                
+                if (item.type === 'highlighter') {
+                    ctx.globalAlpha = 0.35;
+                    ctx.lineWidth = item.size * 4;
+                } else if (item.type === 'eraser') {
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.lineWidth = item.size * 4;
+                } else {
+                    ctx.globalAlpha = 1.0;
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+
+                ctx.beginPath();
+                if (item.path && item.path.length > 0) {
+                    ctx.moveTo(item.path[0].x + dx, item.path[0].y + dy);
+                    for (let i = 1; i < item.path.length; i++) {
+                        ctx.lineTo(item.path[i].x + dx, item.path[i].y + dy);
+                    }
+                }
+                ctx.stroke();
+            } else if (['line', 'arrow', 'rectangle', 'circle'].includes(item.type)) {
+                ctx.strokeStyle = item.color;
+                ctx.lineWidth = item.size;
+                ctx.globalAlpha = 1.0;
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.lineCap = 'butt';
+                ctx.lineJoin = 'miter';
+                
+                const x1 = item.x1 + dx;
+                const y1 = item.y1 + dy;
+                const x2 = item.x2 + dx;
+                const y2 = item.y2 + dy;
+
+                ctx.beginPath();
+
+                if (item.type === 'rectangle') {
+                    const width = x2 - x1;
+                    const height = y2 - y1;
+                    ctx.strokeRect(x1, y1, width, height);
+                } else if (item.type === 'circle') {
+                    // --- FIX: Draw Circle based on Bounding Box Center ---
+                    const width = Math.abs(x2 - x1);
+                    const height = Math.abs(y2 - y1);
+                    
+                    // Calculate the TRUE Center of the bounding box
+                    const centerX = (x1 + x2) / 2;
+                    const centerY = (y1 + y2) / 2;
+                    
+                    // Use the largest dimension to ensure a round circle fits within the box
+                    const radius = Math.max(width, height) / 2; 
+
+                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2); 
+                    // ---------------------------------------------------
+                    ctx.stroke();
+                } else if (item.type === 'line') {
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                } else if (item.type === 'arrow') {
+                    drawArrow(ctx, x1, y1, x2, y2, item.size, item.color);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        // A separate function to draw an arrow (helper for line/arrow tools)
+        function drawArrow(ctx, fromX, fromY, toX, toY, size, color) {
+            const headlen = 10 + size * 2; // length of head in pixels
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = size;
+            ctx.beginPath();
+            
+            // Draw the main line
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
+            
+            // Draw the arrowhead (triangle)
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            
+            ctx.stroke();
+            ctx.restore();
+        }
+        
+        // Redraws all elements from history and text objects
+        function redrawCanvas(tempShape = null) {
+            // Clear canvas
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // If no background image, fill with white
+            const img = document.getElementById('backgroundImage');
+            if (img.style.display !== 'block') {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            // Draw elements from history
+            state.history.forEach(drawElement);
+            
+            // Draw text objects
+            state.textObjects.forEach(drawElement);
+
+            // Draw temporary shape if being drawn
+            if (tempShape) {
+                drawElement(tempShape);
+            }
+
+            // Draw selection box if element is selected
+            if (state.currentTool === 'select' && state.selectedElement) {
+                highlightSelectedElement(state.selectedElement);
+            }
+        }
+
+
+        // --- Core Interaction Handlers ---
+
+        canvas.addEventListener('mousedown', function(e) {
+            const pos = getMousePos(e);
+            state.startX = pos.x;
+            state.startY = pos.y;
+            state.tempShape = null; // Clear temporary shape on new interaction
+
+            // 1. Select/Move tool
+            if (state.currentTool === 'select') {
+                state.selectedElement = hitTest(pos.x, pos.y);
+                if (state.selectedElement) {
+                    state.isDragging = true;
+                    
+                    // Calculate drag offset relative to the element's start point
+                    const currentDX = state.selectedElement.offsetX || 0;
+                    const currentDY = state.selectedElement.offsetY || 0;
+
+                    if (state.selectedElement.type === 'text') {
+                        state.dragOffsetX = pos.x - (state.selectedElement.x + currentDX);
+                        state.dragOffsetY = pos.y - (state.selectedElement.y + currentDY);
+                    } else if (['draw', 'highlighter', 'eraser'].includes(state.selectedElement.type)) {
+                        // Use the first point of the path for consistent offset calculation
+                        const firstPoint = state.selectedElement.path[0];
+                        state.dragOffsetX = pos.x - (firstPoint.x + currentDX);
+                        state.dragOffsetY = pos.y - (firstPoint.y + currentDY);
+                    } else {
+                        // For shapes, use the start point (x1, y1)
+                        state.dragOffsetX = pos.x - (state.selectedElement.x1 + currentDX);
+                        state.dragOffsetY = pos.y - (state.selectedElement.y1 + currentDY);
+                    }
+                    
+                    canvas.style.cursor = 'move';
+                    redrawCanvas(); // Draw once to highlight
+                } else {
+                    // Deselect if clicking on empty space
+                    state.selectedElement = null;
+                    redrawCanvas();
+                }
+                return;
+            }
+
+            // 2. Eyedropper tool
+            if (state.currentTool === 'eyedropper') {
+                pickColorFromCanvas(pos.x, pos.y);
+                return;
+            }
+
+            // 3. Pan tool
+            if (state.currentTool === 'pan' || e.button === 2) {
+                state.isPanning = true;
+                state.panStartX = e.clientX - state.imageOffsetX;
+                state.panStartY = e.clientY - state.imageOffsetY;
+                canvas.style.cursor = 'grabbing';
+                return;
+            }
+
+            // 4. Drawing tools (Freehand/Highlighter/Eraser)
+            if (['draw', 'highlighter', 'eraser'].includes(state.currentTool)) {
+                state.isDrawing = true;
+                state.currentPath = [{x: state.startX, y: state.startY}];
+            } 
+            
+            // 5. Drawing tools (Shape/Line/Arrow)
+            else if (['line', 'arrow', 'rectangle', 'circle'].includes(state.currentTool)) {
+                state.isDrawing = true;
+            }
+
+            // 6. Text tool
+            else if (state.currentTool === 'text') {
+                showTextModal(pos.x, pos.y);
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            const pos = getMousePos(e);
+
+            // A. Handle Element Dragging (Select Tool)
+            if (state.currentTool === 'select' && state.isDragging && state.selectedElement) {
+                // Calculate new position based on mouse position and drag offset
+                const newX = pos.x - state.dragOffsetX;
+                const newY = pos.y - state.dragOffsetY;
+
+                // Update the element's offset (movement)
+                if (state.selectedElement.type === 'text') {
+                    // For text, offsetX/Y is relative to the original x/y
+                    state.selectedElement.offsetX = newX - state.selectedElement.x;
+                    state.selectedElement.offsetY = newY - state.selectedElement.y;
+                } else if (['draw', 'highlighter', 'eraser'].includes(state.selectedElement.type)) {
+                    // For paths, the offset applies to ALL points
+                    const firstPoint = state.selectedElement.path[0];
+                    state.selectedElement.offsetX = newX - firstPoint.x;
+                    state.selectedElement.offsetY = newY - firstPoint.y;
+                } else {
+                    // For shapes, offsetX/Y is relative to the original x1/y1
+                    state.selectedElement.offsetX = newX - state.selectedElement.x1;
+                    state.selectedElement.offsetY = newY - state.selectedElement.y1;
+                }
+
+                redrawCanvas();
+                return;
+            }
+
+            // B. Handle Panning (Pan Tool)
+            if (state.isPanning) {
+                state.imageOffsetX = e.clientX - state.panStartX;
+                state.imageOffsetY = e.clientY - state.panStartY;
+                updateImageTransform(); // Update image style
+                redrawCanvas(); // Redraw annotations on top
+                return;
+            }
+
+            // C. Handle Drawing
+            if (!state.isDrawing) return;
+            
+            // Freehand tools (Draw, Highlighter, Eraser)
+            if (['draw', 'highlighter', 'eraser'].includes(state.currentTool)) {
+                state.currentPath.push({x: pos.x, y: pos.y});
+                redrawCanvas();
+                // Temporarily draw the current path for real-time feedback
+                drawPath(state.currentPath);
+            } 
+            // Shape tools (Line, Arrow, Rect, Circle)
+            else if (['line', 'arrow', 'rectangle', 'circle'].includes(state.currentTool)) {
+                const color = document.getElementById('colorPicker').value;
+                const size = parseInt(document.getElementById('sizeInput').value);
+
+                state.tempShape = {
+                    type: state.currentTool,
+                    color: color,
+                    size: size,
+                    x1: state.startX,
+                    y1: state.startY,
+                    x2: pos.x,
+                    y2: pos.y
+                };
+                redrawCanvas(state.tempShape);
+            }
+        });
+
+        canvas.addEventListener('mouseup', function(e) {
+            const pos = getMousePos(e);
+
+            // 1. Handle Drag End (Select Tool)
+            if (state.isDragging) {
+                state.isDragging = false;
+                canvas.style.cursor = 'default'; 
+                // Restore cursor to default or tool cursor based on the currently selected tool
+                const cursors = {
+                    draw: 'crosshair', line: 'crosshair', arrow: 'crosshair', rectangle: 'crosshair', 
+                    circle: 'crosshair', text: 'text', highlighter: 'crosshair', eraser: 'grab', 
+                    pan: 'grab', eyedropper: 'crosshair', select: 'default'
+                };
+                canvas.style.cursor = cursors[state.currentTool] || 'crosshair';
+                
+                redrawCanvas();
+                return;
+            }
+
+            // 2. Handle Pan End
+            if (state.isPanning) {
+                state.isPanning = false;
+                canvas.style.cursor = state.currentTool === 'pan' ? 'grab' : 'crosshair';
+                return;
+            }
+
+            // 3. Handle Drawing End
+            if (state.isDrawing) {
+                state.isDrawing = false;
+                
+                if (['draw', 'highlighter', 'eraser'].includes(state.currentTool)) {
+                    // Save freehand path to history
+                    if (state.currentPath.length > 1) {
+                        const color = document.getElementById('colorPicker').value;
+                        const size = parseInt(document.getElementById('sizeInput').value);
+                        state.history.push({
+                            type: state.currentTool,
+                            color: state.currentTool === 'eraser' ? '#000000' : color, 
+                            size: size,
+                            path: state.currentPath,
+                            offsetX: 0,
+                            offsetY: 0
+                        });
+                        saveState();
+                    }
+                } else if (state.tempShape) {
+                    // Save shape to history
+                    state.tempShape.offsetX = 0;
+                    state.tempShape.offsetY = 0;
+                    state.history.push(state.tempShape);
+                    state.tempShape = null;
+                    saveState();
+                }
+                redrawCanvas();
+            }
+        });
+
+        // --- Drawing Path Helper (For real-time feedback) ---
+        function drawPath(path) {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            const color = document.getElementById('colorPicker').value;
+            const size = parseInt(document.getElementById('sizeInput').value);
+
+            if (state.currentTool === 'highlighter') {
+                ctx.globalAlpha = 0.35;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = size * 4;
+            } else if (state.currentTool === 'draw') {
+                ctx.globalAlpha = 1.0;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = size;
+                ctx.globalCompositeOperation = 'source-over';
+            } else if (state.currentTool === 'eraser') {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.lineWidth = size * 4;
+            }
+            
+            ctx.beginPath();
+            if (path.length > 0) {
+                ctx.moveTo(path[0].x, path[0].y);
+                for (let i = 1; i < path.length; i++) {
+                    ctx.lineTo(path[i].x, path[i].y);
+                }
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+
+        // --- Text Tool Handlers ---
+
+        let textAnchor = {x: 0, y: 0};
+
+        function showTextModal(x, y) {
+            textAnchor = {x, y};
+            document.getElementById('textModal').classList.add('active');
+            document.getElementById('textInput').focus();
+        }
+
+        function cancelText() {
+            document.getElementById('textModal').classList.remove('active');
+            document.getElementById('textInput').value = '';
+        }
+
+        function addText() {
+            const text = document.getElementById('textInput').value.trim();
+            const size = parseInt(document.getElementById('textSizeInput').value);
+            const color = document.getElementById('colorPicker').value;
+            
+            if (text) {
+                state.textObjects.push({
+                    type: 'text',
+                    text: text,
+                    size: size,
+                    color: color,
+                    x: textAnchor.x,
+                    y: textAnchor.y,
+                    offsetX: 0,
+                    offsetY: 0
+                });
+                saveState();
+                redrawCanvas();
+            }
+            cancelText();
+        }
+
+        // --- State Management ---
+
+        function saveState() {
+            // Placeholder for a robust history/state saving implementation
+        }
+
+        function undo() {
+            if (state.history.length > 0) {
+                state.history.pop();
+                state.selectedElement = null;
+                redrawCanvas();
+            } else if (state.textObjects.length > 0) {
+                state.textObjects.pop();
+                state.selectedElement = null;
+                redrawCanvas();
+            }
+        }
+
+        function clearCanvas() {
+            if (confirm('Are you sure you want to clear all annotations?')) {
+                state.history = [];
+                state.textObjects = [];
+                state.selectedElement = null;
+                redrawCanvas();
+            }
+        }
+
+        // --- Image/File Management ---
+
+        // File upload handler
+        document.getElementById('imageUpload').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.type === 'application/pdf') {
+                await loadPDF(file);
+            } else {
+                loadImage(file);
+            }
+        });
+
+        // Load PDF file
+        async function loadPDF(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                const page = await pdf.getPage(1);
+                
+                const viewport = page.getViewport({scale: 2});
+                const pdfCanvas = document.createElement('canvas');
+                const pdfCtx = pdfCanvas.getContext('2d');
+                pdfCanvas.width = viewport.width;
+                pdfCanvas.height = viewport.height;
+                
+                await page.render({
+                    canvasContext: pdfCtx,
+                    viewport: viewport
+                }).promise;
+                
+                const img = document.getElementById('backgroundImage');
+                img.src = pdfCanvas.toDataURL();
+                img.onload = () => initCanvas(img);
+            } catch (error) {
+                console.error('Error loading PDF:', error);
+                alert('Failed to load PDF. Please try another file.');
+            }
+        }
+
+        // Load image file
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = document.getElementById('backgroundImage');
+                img.src = event.target.result;
+                img.onload = () => initCanvas(img);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Start with blank canvas
+        function startBlankCanvas() {
+            const img = document.getElementById('backgroundImage');
+            img.style.display = 'none';
+            initCanvas(null);
+        }
+
+        // Initialize canvas
+        function initCanvas(img) {
+            document.getElementById('uploadPrompt').classList.add('hidden');
+            document.getElementById('toolbar').style.display = 'flex';
+            document.getElementById('canvasContainer').style.display = 'block';
+            document.getElementById('actionButtons').style.display = 'flex';
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            if (img && img.src) {
+                img.style.display = 'block';
+                document.getElementById('resizeControls').classList.add('show');
+                
+                state.originalImageWidth = img.naturalWidth;
+                state.originalImageHeight = img.naturalHeight;
+                
+                fitToScreen();
+            } else {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                document.getElementById('resizeControls').classList.remove('show');
+            }
+
+            redrawCanvas();
+        }
+
+        // Image zoom and positioning functions
+        function fitToScreen() {
+            if (state.originalImageWidth === 0) return;
+
+            const scaleX = window.innerWidth / state.originalImageWidth;
+            const scaleY = window.innerHeight / state.originalImageHeight;
+            state.imageScale = Math.min(scaleX, scaleY, 1);
+
+            const scaledWidth = state.originalImageWidth * state.imageScale;
+            const scaledHeight = state.originalImageHeight * state.imageScale;
+
+            state.imageOffsetX = (window.innerWidth - scaledWidth) / 2;
+            state.imageOffsetY = (window.innerHeight - scaledHeight) / 2;
+
+            updateImageTransform();
+        }
+
+        function zoomImage(delta) {
+            state.imageScale = Math.max(0.1, Math.min(3, state.imageScale + delta));
+            updateImageTransform();
+        }
+
+        function resetZoom() {
+            state.imageScale = 1;
+            state.imageOffsetX = (window.innerWidth - state.originalImageWidth) / 2;
+            state.imageOffsetY = (window.innerHeight - state.originalImageHeight) / 2;
+            updateImageTransform();
+        }
+
+        function updateImageTransform() {
+            const img = document.getElementById('backgroundImage');
+            if (img.style.display === 'none') return;
+            
+            const scaledWidth = state.originalImageWidth * state.imageScale;
+            const scaledHeight = state.originalImageHeight * state.imageScale;
+            
+            img.style.width = scaledWidth + 'px';
+            img.style.height = scaledHeight + 'px';
+            img.style.left = state.imageOffsetX + 'px';
+            img.style.top = state.imageOffsetY + 'px';
+
+            document.getElementById('zoomDisplay').textContent = Math.round(state.imageScale * 100) + '%';
+        }
+
+        // Tool selection
+        function selectTool(tool) {
+            state.currentTool = tool;
+            state.selectedElement = null; // Deselect when changing tools
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+
+            const cursors = {
+                draw: 'crosshair',
+                line: 'crosshair',
+                arrow: 'crosshair',
+                rectangle: 'crosshair',
+                circle: 'crosshair',
+                text: 'text',
+                highlighter: 'crosshair',
+                eraser: 'grab',
+                pan: 'grab',
+                eyedropper: 'crosshair',
+                select: 'default'
+            };
+            canvas.style.cursor = cursors[tool] || 'crosshair';
+            redrawCanvas(); // Update canvas to remove selection box
+        }
+
+        // Color picking
+        function pickColorFromCanvas(x, y) {
+            // Read pixel data from the canvas
+            const pixel = ctx.getImageData(x, y, 1, 1).data;
+            // Convert to hex color
+            const hex = `#${('0' + pixel[0].toString(16)).slice(-2)}${('0' + pixel[1].toString(16)).slice(-2)}${('0' + pixel[2].toString(16)).slice(-2)}`;
+            
+            // Apply the color
+            document.getElementById('colorPicker').value = hex;
+            // Switch back to the previous tool or draw
+            selectTool('draw'); 
+        }
+
+        // Save image
+        function saveImage() {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = window.innerWidth;
+            tempCanvas.height = window.innerHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            const img = document.getElementById('backgroundImage');
+
+            // Draw background (scaled and positioned)
+            if (img.style.display === 'block') {
+                tempCtx.drawImage(img, 
+                    state.imageOffsetX, state.imageOffsetY, 
+                    state.originalImageWidth * state.imageScale, 
+                    state.originalImageHeight * state.imageScale
+                );
+            } else {
+                tempCtx.fillStyle = 'white';
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            }
+
+            // Redraw all annotations onto the temporary canvas for saving
+            // We use the original drawing functions which already handle offsets (offsetX/Y)
+            // Note: If drawElement is used outside the main context, it needs to be passed
+            // the context (tempCtx) or the original drawElement function must be context-agnostic.
+            // Since drawElement uses the global 'ctx', we'll rely on it for simplicity here,
+            // but it's crucial to ensure all drawing logic correctly targets tempCtx for saving.
+            
+            // Since the canvas is already cleared and correctly sized (window dimensions),
+            // and the image is drawn, we must now draw the annotations *relative to the top-left (0,0)*
+            // of the tempCanvas, which matches the annotationCanvas's coordinate system.
+            
+            // Re-implementing drawElement targeting tempCtx for safety:
+             function drawElementOnContext(item, targetCtx) {
+                targetCtx.save();
+                const dx = item.offsetX || 0;
+                const dy = item.offsetY || 0;
+
+                if (item.type === 'text') {
+                    targetCtx.fillStyle = item.color;
+                    targetCtx.font = `${item.size}px Arial`;
+                    targetCtx.fillText(item.text, item.x + dx, item.y + dy);
+                } else if (['draw', 'highlighter', 'eraser'].includes(item.type)) {
+                    targetCtx.lineCap = 'round';
+                    targetCtx.lineJoin = 'round';
+                    targetCtx.lineWidth = item.size;
+                    targetCtx.strokeStyle = item.color;
+                    
+                    if (item.type === 'highlighter') {
+                        targetCtx.globalAlpha = 0.35;
+                        targetCtx.lineWidth = item.size * 4;
+                    } else if (item.type === 'eraser') {
+                        // NOTE: Eraser on a new canvas will wipe the new canvas, not the image.
+                        // For correct saving, Eraser items should be handled by drawing the background image 
+                        // *after* the eraser path is drawn using 'destination-out', but this is complex.
+                        // For a simple save, we skip complex compositing for eraser on the temp canvas.
+                        // A better approach is to merge layers, but for simplicity, we treat eraser paths 
+                        // as transparent draw paths for saving purposes, which is imperfect.
+                        targetCtx.globalCompositeOperation = 'source-over'; 
+                    } else {
+                        targetCtx.globalAlpha = 1.0;
+                        targetCtx.globalCompositeOperation = 'source-over';
+                    }
+
+                    targetCtx.beginPath();
+                    if (item.path && item.path.length > 0) {
+                        targetCtx.moveTo(item.path[0].x + dx, item.path[0].y + dy);
+                        for (let i = 1; i < item.path.length; i++) {
+                            targetCtx.lineTo(item.path[i].x + dx, item.path[i].y + dy);
+                        }
+                    }
+                    targetCtx.stroke();
+                } else if (['line', 'arrow', 'rectangle', 'circle'].includes(item.type)) {
+                    targetCtx.strokeStyle = item.color;
+                    targetCtx.lineWidth = item.size;
+                    targetCtx.globalAlpha = 1.0;
+                    targetCtx.globalCompositeOperation = 'source-over';
+                    
+                    const x1 = item.x1 + dx;
+                    const y1 = item.y1 + dy;
+                    const x2 = item.x2 + dx;
+                    const y2 = item.y2 + dy;
+
+                    targetCtx.beginPath();
+
+                    if (item.type === 'rectangle') {
+                        const width = x2 - x1;
+                        const height = y2 - y1;
+                        targetCtx.strokeRect(x1, y1, width, height);
+                    } else if (item.type === 'circle') {
+                        const width = Math.abs(x2 - x1);
+                        const height = Math.abs(y2 - y1);
+                        const centerX = (x1 + x2) / 2;
+                        const centerY = (y1 + y2) / 2;
+                        const radius = Math.max(width, height) / 2; 
+                        targetCtx.arc(centerX, centerY, radius, 0, Math.PI * 2); 
+                        targetCtx.stroke();
+                    } else if (item.type === 'line') {
+                        targetCtx.moveTo(x1, y1);
+                        targetCtx.lineTo(x2, y2);
+                        targetCtx.stroke();
+                    } else if (item.type === 'arrow') {
+                        drawArrow(targetCtx, x1, y1, x2, y2, item.size, item.color);
+                    }
+                }
+                targetCtx.restore();
+            }
+            
+            state.history.forEach(item => drawElementOnContext(item, tempCtx));
+            state.textObjects.forEach(item => drawElementOnContext(item, tempCtx));
+            
+            const dataURL = tempCanvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'annotation_capture.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+        
+        // Initial setup on window load
+        window.onload = function() {
+            window.onresize = () => {
+                 canvas.width = window.innerWidth;
+                 canvas.height = window.innerHeight;
+                 if (document.getElementById('backgroundImage').style.display === 'block') {
+                     fitToScreen();
+                 }
+                 redrawCanvas();
+            };
+        };
+    </script>
+</body>
+</html>
